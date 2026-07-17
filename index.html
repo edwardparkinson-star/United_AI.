@@ -1,85 +1,295 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UNITED</title>
-    <style>
-        body { margin:0; padding:20px; background:#0a0a0a; color:#fff; font-family:system-ui; height:100vh; box-sizing:border-box; }
-        h1 { color:#ff3333; text-align:center; margin:0 0 8px; }
-        .status { padding:15px; background:rgba(255,51,51,0.15); border-radius:12px; text-align:center; margin:15px 0; min-height:50px; }
-        button { width:100%; padding:18px; margin:8px 0; font-size:1.1rem; border:none; border-radius:12px; font-weight:bold; }
-        .red-btn { background:#ff2222; }
-        .listen-btn { background:#333; }
-        .signature { position:fixed; bottom:12px; left:0; right:0; text-align:center; color:#444; font-size:0.75rem; }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>UNITED</title>
+<style>
+  :root{--bg:#0a0a0a;--accent:#ff3333;--muted:#888;--card:rgba(255,51,51,0.12)}
+  html,body{height:100%}
+  body{margin:0;padding:20px;background:var(--bg);color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial;box-sizing:border-box}
+  h1{color:var(--accent);text-align:center;margin:0 0 8px;font-size:1.4rem}
+  .status{padding:12px;background:var(--card);border-radius:10px;text-align:center;margin:12px 0;min-height:48px;font-size:0.95rem}
+  .row{display:flex;gap:8px}
+  button{flex:1;padding:12px;border:0;border-radius:10px;font-weight:700;font-size:1rem;cursor:pointer}
+  .red{background:#ff2222;color:#fff}
+  .dark{background:#222;color:#fff}
+  .muted{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#fff}
+  .signature{position:fixed;left:0;right:0;bottom:10px;text-align:center;color:var(--muted);font-size:0.75rem}
+  .small{font-size:0.85rem}
+  input[type=text]{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#111;color:#fff}
+</style>
 </head>
 <body>
-    <h1>UNITED</h1>
-    <div class="status" id="status">Ready. Say ALERT or press the button</div>
-    <button onclick="activateEmergency()" class="red-btn">EMERGENCY</button>
-    <button onclick="startListening()" class="listen-btn">Start Listening for ALERT</button>
-    <div class="signature">Built by Edward "The WOLF" Parkinson and Ara by Grok v1.01</div>
+  <h1>UNITED</h1>
+  <div id="status" class="status">Ready. Say "ALERT" or tap EMERGENCY</div>
 
-    <script>
-        let isActive = false;
-        function startListening() {
-            "document.getElementByld"("status").innerHTML="Listening...";}
+  <div class="row" style="margin-bottom:8px">
+    <button id="emBtn" class="red">EMERGENCY</button>
+    <button id="listenBtn" class="dark">Start Listening</button>
+  </div>
 
-        function activateEmergency() {
-            isActive = true;
-            document.getElementById("status").innerHTML = "EMERGENCY MODE ACTIVATED<br>Recording discreetly...";
-            startRecording();
-            startCalmVoice();
+  <div class="row small" style="margin-bottom:8px">
+    <button id="enableEmsBtn" class="muted">Enable EMS (phone verify)</button>
+    <button id="disableEmsBtn" class="muted" style="display:none">Disable EMS</button>
+  </div>
+
+  <div style="margin-bottom:8px" class="small">Device mode: <strong id="modeLabel">TEST</strong></div>
+  <div class="signature">Built by Edward "The WOLF" Parkinson</div>
+
+<script>
+(() => {
+  // CONFIG - fill these values for your deployment
+  const TEST_RELAY_ENDPOINT = ''; // e.g. 'https://your-test.example' (must support /request-otp, /verify-otp, /receive-alert)
+  const TEST_RELAY_TOKEN = '';    // token for test relay
+  const EMS_ENDPOINT = '';        // real EMS endpoint, e.g. 'https://your-ems.example/receive-alert'
+  const EMS_AUTH_TOKEN = '';      // real EMS auth token (keep secret)
+  const TEST_PHONE = '+17133801196';         // your phone number used for OTP and test SMS (E.164, +12223334444)
+
+  // constants
+  const UNIVERSAL_CODE = 'UNITED-EMS-ALERT-001';
+  const EMS_ENABLED_KEY = 'united_ems_enabled_v1'; // localStorage key
+
+  // state
+  let isActive = false, mediaStream = null, recorder = null, calmInterval = null, recognition = null;
+  let chunks = [];
+
+  // DOM helpers
+  const $ = id => document.getElementById(id);
+  const setStatus = (txt, html = false) => { const el = $('status'); if (html) el.innerHTML = txt; else el.textContent = txt; };
+  const setModeLabel = () => { $('modeLabel').textContent = isEmsEnabledLocally() ? 'EMS (LIVE)' : 'TEST'; };
+
+  // storage
+  function isEmsEnabledLocally() { return localStorage.getItem(EMS_ENABLED_KEY) === '1'; }
+  function setEmsEnabledLocally(v) { if (v) localStorage.setItem(EMS_ENABLED_KEY, '1'); else localStorage.removeItem(EMS_ENABLED_KEY); updateEmsButtons(); }
+
+  function updateEmsButtons() {
+    const en = $('enableEmsBtn'); const dis = $('disableEmsBtn');
+    if (isEmsEnabledLocally()) { en.style.display = 'none'; dis.style.display = ''; } else { en.style.display = ''; dis.style.display = 'none'; }
+    setModeLabel();
+  }
+
+  // LOCATION
+  async function collectLocation() {
+    return new Promise(resolve => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        p => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy }),
+        () => resolve(null),
+        { maximumAge: 60000, timeout: 5000 }
+      );
+    });
+  }
+
+  // RECORDING
+  async function startRecording() {
+    if (mediaStream) return;
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      recorder = new MediaRecorder(mediaStream);
+      chunks = [];
+      recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: chunks[0]?.type || 'video/webm' });
+        // send recording to appropriate endpoint
+        if (getIsTestMode()) {
+          await sendToTestRelayFormData(blob);
+        } else {
+          await sendToEmsFormData(blob);
         }
+      };
+      recorder.start();
+    } catch (err) {
+      console.error('getUserMedia error', err);
+      setStatus('Camera/Mic access denied or unavailable');
+    }
+  }
 
-        async function startRecording() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                const recorder = new MediaRecorder(stream);
-                recorder.start();
-            } catch(e)        }
+  function stopRecordingAndVoice() {
+    isActive = false;
+    setStatus('Ready. Say "ALERT" or tap EMERGENCY');
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+    if (calmInterval) { clearInterval(calmInterval); calmInterval = null; }
+    if (recognition && !isEmsEnabledLocally()) {
+      // keep recognition running in test mode if you want; here we leave it as-is
+    }
+  }
 
-        function startCalmVoice() {
-            const messages = [
-                "Help is coming. You're not alone.",
-                "Breathe slowly. Stay with me.",
-                "You're doing great. Help is on the way."
-            ];
-            let i = 0;
-            setInterval(() => {
-                if (isActive) {
-                    const utterance = new SpeechSynthesisUtterance(messages );
-                    utterance.rate = 0.92;
-                    speechSynthesis.speak(utterance);
-                    i=(i+1)%messages.length;
-                }
-            }, 15000);
-        }
+  function startCalmVoice() {
+    if (!('speechSynthesis' in window) || calmInterval) return;
+    const messages = [
+      "Help is coming. You're not alone.",
+      "Breathe slowly. Stay with me.",
+      "You're doing great. Help is on the way."
+    ];
+    let i = 0;
+    calmInterval = setInterval(() => {
+      if (!isActive) return;
+      const u = new SpeechSynthesisUtterance(messages[i]);
+      u.rate = 0.95; u.lang = navigator.language || 'en-US';
+      speechSynthesis.speak(u);
+      i = (i + 1) % messages.length;
+    }, 15000);
+  }
 
-        function startListening() {
-            if (!('SpeechRecognition' in window)) {
-                alert("Voice recognition not supported on this browser.");
-                return;
-            }
-            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = navigator.language || 'en-US';
-            
-            recognition.onresult = (event) => {
-                const text = event.results'[event.results.length-1]'.transcript.toLowerCase();
-                document.getElementById("status").textContent = text;
-                if (text.includes("alert")) {
-                    activateEmergency();
-                }
-            };
-            recognition.start();
-        }
+  // HELPERS: send metadata to test relay or EMS
+  async function sendAlertMetadata() {
+    const loc = await collectLocation();
+    const payload = { code: UNIVERSAL_CODE, timestamp: new Date().toISOString(), location: loc };
 
-        window.onload = () => {
-            document.getElementById("status").textContent = "Ready. Say ALERT or tap EMERGENCY";
-        };
-    </script>
+    if (getIsTestMode()) {
+      // test path -> send to test relay which will SMS you (do not forward to EMS)
+      if (!TEST_RELAY_ENDPOINT) return console.warn('TEST_RELAY_ENDPOINT not set');
+      try {
+        await fetch(TEST_RELAY_ENDPOINT + '/receive-alert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN },
+          body: JSON.stringify({ type: 'metadata', data: payload, to: TEST_PHONE, test: true }),
+          mode: 'cors'
+        });
+        console.log('Test metadata sent to relay');
+      } catch (e) { console.warn('Test relay send failed', e); }
+      return;
+    }
+
+    // production path -> send to EMS endpoint
+    if (!EMS_ENDPOINT) return console.warn('EMS_ENDPOINT not set');
+    try {
+      await fetch(EMS_ENDPOINT, {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, EMS_AUTH_TOKEN ? { 'Authorization': 'Bearer ' + EMS_AUTH_TOKEN } : {}),
+        body: JSON.stringify({ type: 'metadata', data: payload }),
+        mode: 'cors'
+      });
+      console.log('EMS metadata sent');
+    } catch (e) { console.warn('EMS metadata send failed', e); }
+  }
+
+  async function sendToTestRelayFormData(blob) {
+    if (!TEST_RELAY_ENDPOINT) return;
+    const loc = await collectLocation();
+    const form = new FormData();
+    form.append('file', blob, 'recording.webm');
+    form.append('code', UNIVERSAL_CODE);
+    form.append('timestamp', new Date().toISOString());
+    if (loc) { form.append('latitude', loc.lat); form.append('longitude', loc.lon); }
+    try {
+      await fetch(TEST_RELAY_ENDPOINT + '/receive-alert/recording', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body: form, mode: 'cors'
+      });
+      console.log('Test recording sent');
+    } catch (e) { console.warn('Test recording send failed', e); }
+  }
+
+  async function sendToEmsFormData(blob) {
+    if (!EMS_ENDPOINT) return;
+    const loc = await collectLocation();
+    const form = new FormData();
+    form.append('file', blob, 'recording.webm');
+    form.append('code', UNIVERSAL_CODE);
+    form.append('timestamp', new Date().toISOString());
+    if (loc) { form.append('latitude', loc.lat); form.append('longitude', loc.lon); }
+    try {
+      await fetch(EMS_ENDPOINT + '/recording', {
+        method: 'POST', headers: EMS_AUTH_TOKEN ? { 'Authorization': 'Bearer ' + EMS_AUTH_TOKEN } : {}, body: form, mode: 'cors'
+      });
+      console.log('EMS recording sent');
+    } catch (e) { console.warn('EMS recording send failed', e); }
+  }
+
+  // Decide current mode
+  function getIsTestMode() { return !isEmsEnabledLocally(); }
+
+  // ACTIVATE
+  async function activateEmergency() {
+    if (isActive) return;
+    isActive = true;
+    setStatus('EMERGENCY MODE ACTIVATED\nRecording discreetly...', false);
+    startRecording();
+    startCalmVoice();
+    // send metadata immediately
+    await sendAlertMetadata();
+  }
+
+  // SPEECH RECOGNITION
+  function initSpeechRecognition() {
+    if (recognition) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { /* not supported */ return; }
+    recognition = new SR();
+    recognition.continuous = true; recognition.interimResults = false; recognition.lang = navigator.language || 'en-US';
+    recognition.onresult = event => {
+      const last = event.results[event.results.length - 1];
+      const t = (last[0]?.transcript || '').trim().toLowerCase();
+      if (t) setStatus(t);
+      if (t.includes('alert')) activateEmergency();
+    };
+    recognition.onerror = e => { console.error('Recognition error', e); };
+    recognition.onend = () => { if (isActive) recognition.start(); };
+  }
+
+  function startListening() {
+    initSpeechRecognition();
+    if (!recognition) return alert('Voice recognition not supported in this browser.');
+    try { recognition.start(); setStatus('Listening...'); } catch (e) { setStatus('Listening...'); }
+  }
+
+  // OTP flow to enable EMS on this device only
+  async function requestOtp() {
+    if (!TEST_RELAY_ENDPOINT) return alert('TEST_RELAY_ENDPOINT not configured');
+    if (!TEST_PHONE) return alert('TEST_PHONE not configured');
+    try {
+      const resp = await fetch(TEST_RELAY_ENDPOINT + '/request-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN },
+        body: JSON.stringify({ to: TEST_PHONE })
+      });
+      if (!resp.ok) throw new Error('request-otp failed');
+      alert('OTP sent to your phone. Enter it when prompted.');
+      await verifyOtpFlow();
+    } catch (err) {
+      console.error(err); alert('Could not request OTP. Check test relay.');
+    }
+  }
+
+  async function verifyOtpFlow() {
+    const code = prompt('Enter the 6-digit verification code sent to your phone:');
+    if (!code) return alert('Verification cancelled.');
+    try {
+      const resp = await fetch(TEST_RELAY_ENDPOINT + '/verify-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN },
+        body: JSON.stringify({ to: TEST_PHONE, code })
+      });
+      const json = await resp.json();
+      if (resp.ok && json.verified) {
+        setEmsEnabledLocally(true);
+        alert('Device verified. EMS enabled on this device. Future alerts will go to EMS.');
+      } else {
+        alert('Verification failed. Try again.');
+      }
+    } catch (err) { console.error(err); alert('Verification request failed.'); }
+  }
+
+  function disableEmsLocally() { setEmsEnabledLocally(false); alert('EMS disabled on this device. Returning to TEST mode.'); }
+
+  // UI wiring
+  $('emBtn').addEventListener('click', activateEmergency);
+  $('listenBtn').addEventListener('click', startListening);
+  $('enableEmsBtn').addEventListener('click', requestOtp);
+  $('disableEmsBtn').addEventListener('click', disableEmsLocally);
+  $('emBtn').addEventListener('dblclick', stopRecordingAndVoice);
+
+  // initialize
+  window.addEventListener('load', () => {
+    if (localStorage.getItem(EMS_ENABLED_KEY) === null) {
+      // default: test mode until verified
+      setEmsEnabledLocally(false);
+    }
+    updateEmsButtons();
+    setStatus('Ready. Say "ALERT" or tap EMERGENCY');
+  });
+
+})();
+</script>
 </body>
 </html>
