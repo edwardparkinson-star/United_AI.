@@ -47,7 +47,7 @@
 (() => {
   // CONFIG - fill these values for your deployment
   const TEST_RELAY_ENDPOINT = ''; // e.g. 'https://your-test.example' (must support /request-otp, /verify-otp, /receive-alert)
-  const TEST_RELAY_TOKEN = '';    // token for test relay
+  const TEST_RELAY_TOKEN = crypto.randomUUID();    // token for test relay
   const EMS_ENDPOINT = '';        // real EMS endpoint, e.g. 'https://your-ems.example/receive-alert'
   const EMS_AUTH_TOKEN = '';      // real EMS auth token (keep secret)
   const TEST_PHONE = '+17133801196';         // your phone number used for OTP and test SMS (E.164)
