@@ -50,7 +50,7 @@
                     const utterance = new SpeechSynthesisUtterance(messages );
                     utterance.rate = 0.92;
                     speechSynthesis.speak(utterance);
-                    i++;
+                    i=(i+1)%messages.length;
                 }
             }, 15000);
         }
@@ -66,7 +66,7 @@
             recognition.lang = navigator.language || 'en-US';
             
             recognition.onresult = (event) => {
-                const text = event.results[0].transcript.toLowerCase();
+                const text = event.results'[event.results.length-1]'.transcript.toLowerCase();
                 document.getElementById("status").textContent = text;
                 if (text.includes("alert")) {
                     activateEmergency();
