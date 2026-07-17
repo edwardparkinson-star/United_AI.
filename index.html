@@ -92,7 +92,12 @@
   async function startRecording() {
     if (mediaStream) return;
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      mediaStream = await.navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video. videoHeight;
+      ctx.
       recorder = new MediaRecorder(mediaStream);
       chunks = [];
       recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
