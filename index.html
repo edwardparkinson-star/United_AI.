@@ -9,7 +9,7 @@
   html,body{height:100%}
   body{margin:0;padding:20px;background:var(--bg);color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial;box-sizing:border-box}
   h1{color:var(--accent);text-align:center;margin:0 0 8px;font-size:1.4rem}
-  .status{padding:12px;background:var(--card);border-radius:10px;text-align:center;margin:12px 0;min-height:48px;font-size:0.95rem}
+  .status{padding:12px;background:var(--card);border-radius:10px;text-align:center;margin:12px 0;min-height:48px;font-size:0.95rem;white-space:pre-wrap}
   .row{display:flex;gap:8px}
   button{flex:1;padding:12px;border:0;border-radius:10px;font-weight:700;font-size:1rem;cursor:pointer}
   .red{background:#ff2222;color:#fff}
@@ -18,6 +18,7 @@
   .signature{position:fixed;left:0;right:0;bottom:10px;text-align:center;color:var(--muted);font-size:0.75rem}
   .small{font-size:0.85rem}
   input[type=text]{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#111;color:#fff}
+  label.switch{display:flex;align-items:center;gap:8px}
 </style>
 </head>
 <body>
@@ -35,6 +36,11 @@
   </div>
 
   <div style="margin-bottom:8px" class="small">Device mode: <strong id="modeLabel">TEST</strong></div>
+
+  <div style="margin-bottom:8px" class="small">
+    <label class="switch"><input id="confirmEms" type="checkbox"> Confirm SEND to EMS (required for live dispatch)</label>
+  </div>
+
   <div class="signature">Built by Edward "The WOLF" Parkinson</div>
 
 <script>
@@ -44,10 +50,11 @@
   const TEST_RELAY_TOKEN = '';    // token for test relay
   const EMS_ENDPOINT = '';        // real EMS endpoint, e.g. 'https://your-ems.example/receive-alert'
   const EMS_AUTH_TOKEN = '';      // real EMS auth token (keep secret)
-  const TEST_PHONE = '+17133801196';         // your phone number used for OTP and test SMS (E.164, +12223334444)
+  const TEST_PHONE = '+17133801196';         // your phone number used for OTP and test SMS (E.164)
 
   // constants
   const UNIVERSAL_CODE = 'UNITED-EMS-ALERT-001';
+  const TEST_SMS_MESSAGE = 'UNITED TEST ALERT — DO NOT DISPATCH EMS';
   const EMS_ENABLED_KEY = 'united_ems_enabled_v1'; // localStorage key
 
   // state
@@ -95,6 +102,11 @@
         if (getIsTestMode()) {
           await sendToTestRelayFormData(blob);
         } else {
+          // require explicit confirmation checkbox for live EMS sends
+          if (!$('confirmEms').checked) {
+            console.warn('EMS send blocked: confirmEms not checked');
+            return;
+          }
           await sendToEmsFormData(blob);
         }
       };
@@ -111,9 +123,6 @@
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
     if (calmInterval) { clearInterval(calmInterval); calmInterval = null; }
-    if (recognition && !isEmsEnabledLocally()) {
-      // keep recognition running in test mode if you want; here we leave it as-is
-    }
   }
 
   function startCalmVoice() {
@@ -133,7 +142,7 @@
     }, 15000);
   }
 
-  // HELPERS: send metadata to test relay or EMS
+  // HELPERS: send metadata to test relay (twice) or EMS
   async function sendAlertMetadata() {
     const loc = await collectLocation();
     const payload = { code: UNIVERSAL_CODE, timestamp: new Date().toISOString(), location: loc };
@@ -141,20 +150,19 @@
     if (getIsTestMode()) {
       // test path -> send to test relay which will SMS you (do not forward to EMS)
       if (!TEST_RELAY_ENDPOINT) return console.warn('TEST_RELAY_ENDPOINT not set');
+      const body = JSON.stringify({ type: 'metadata', data: payload, to: TEST_PHONE, test: true, message: TEST_SMS_MESSAGE });
       try {
-        await fetch(TEST_RELAY_ENDPOINT + '/receive-alert', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN },
-          body: JSON.stringify({ type: 'metadata', data: payload, to: TEST_PHONE, test: true }),
-          mode: 'cors'
-        });
-        console.log('Test metadata sent to relay');
+        // send twice so you receive two SMS confirmations
+        await fetch(TEST_RELAY_ENDPOINT + '/receive-alert', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body, mode: 'cors' });
+        await fetch(TEST_RELAY_ENDPOINT + '/receive-alert', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body, mode: 'cors' });
+        console.log('Test metadata sent twice to relay');
       } catch (e) { console.warn('Test relay send failed', e); }
       return;
     }
 
-    // production path -> send to EMS endpoint
+    // production path -> send to EMS endpoint (require confirmation checkbox)
     if (!EMS_ENDPOINT) return console.warn('EMS_ENDPOINT not set');
+    if (!$('confirmEms').checked) { alert('To send to live EMS you must check "Confirm SEND to EMS"'); return; }
     try {
       await fetch(EMS_ENDPOINT, {
         method: 'POST',
@@ -173,17 +181,19 @@
     form.append('file', blob, 'recording.webm');
     form.append('code', UNIVERSAL_CODE);
     form.append('timestamp', new Date().toISOString());
+    form.append('message', TEST_SMS_MESSAGE);
     if (loc) { form.append('latitude', loc.lat); form.append('longitude', loc.lon); }
     try {
-      await fetch(TEST_RELAY_ENDPOINT + '/receive-alert/recording', {
-        method: 'POST', headers: { 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body: form, mode: 'cors'
-      });
-      console.log('Test recording sent');
+      // send twice
+      await fetch(TEST_RELAY_ENDPOINT + '/receive-alert/recording', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body: form, mode: 'cors' });
+      await fetch(TEST_RELAY_ENDPOINT + '/receive-alert/recording', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body: form, mode: 'cors' });
+      console.log('Test recording sent twice');
     } catch (e) { console.warn('Test recording send failed', e); }
   }
 
   async function sendToEmsFormData(blob) {
     if (!EMS_ENDPOINT) return;
+    if (!$('confirmEms').checked) { alert('To send to live EMS you must check "Confirm SEND to EMS"'); return; }
     const loc = await collectLocation();
     const form = new FormData();
     form.append('file', blob, 'recording.webm');
