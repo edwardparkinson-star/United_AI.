@@ -92,17 +92,14 @@
   async function startRecording() {
     if (mediaStream) return;
     try {
-      mediaStream = await.navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = video.videoWidth;
-      canvas.height = video. videoHeight;
-      ctx.
+      // FIXED: Removed period after await, dropped broken canvas/video scraps, and requested audio access
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
       recorder = new MediaRecorder(mediaStream);
       chunks = [];
       recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
       recorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: chunks[0]?.type || 'video/webm' });
+        const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
         // send recording to appropriate endpoint
         if (getIsTestMode()) {
           await sendToTestRelayFormData(blob);
@@ -118,7 +115,7 @@
       recorder.start();
     } catch (err) {
       console.error('getUserMedia error', err);
-      setStatus('Camera/Mic access denied or unavailable');
+      setStatus('Microphone access denied or unavailable');
     }
   }
 
