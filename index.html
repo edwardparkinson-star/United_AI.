@@ -92,7 +92,6 @@
   async function startRecording() {
     if (mediaStream) return;
     try {
-      // FIXED: Removed period after await, dropped broken canvas/video scraps, and requested audio access
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
       recorder = new MediaRecorder(mediaStream);
@@ -100,11 +99,9 @@
       recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
       recorder.onstop = async () => {
         const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
-        // send recording to appropriate endpoint
         if (getIsTestMode()) {
           await sendToTestRelayFormData(blob);
         } else {
-          // require explicit confirmation checkbox for live EMS sends
           if (!$('confirmEms').checked) {
             console.warn('EMS send blocked: confirmEms not checked');
             return;
@@ -206,7 +203,6 @@
     } catch (e) { console.warn('EMS recording send failed', e); }
   }
 
-  // Decide current mode
   function getIsTestMode() { return !isEmsEnabledLocally(); }
 
   // ACTIVATE
@@ -230,7 +226,17 @@
       const last = event.results[event.results.length - 1];
       const t = (last[0]?.transcript || '').trim().toLowerCase();
       if (t) setStatus(t);
-      if (t.includes('alert')) activateEmergency();
+      
+      // Activation phrase
+      if (t.includes('alert')) {
+        activateEmergency();
+      }
+      
+      // EMS/Hospital Deactivation code phrase updated to "help has arrived"
+      if (t.includes('help has arrived')) {
+        stopRecordingAndVoice();
+        setStatus('Deactivated by EMS response team.');
+      }
     };
     recognition.onerror = e => { console.error('Recognition error', e); };
     recognition.onend = () => { if (isActive) recognition.start(); };
@@ -248,7 +254,9 @@
     if (!TEST_PHONE) return alert('TEST_PHONE not configured');
     try {
       const resp = await fetch(TEST_RELAY_ENDPOINT + '/request-otp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN },
+        method: 'POST', 
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN },
         body: JSON.stringify({ to: TEST_PHONE })
       });
       if (!resp.ok) throw new Error('request-otp failed');
@@ -265,7 +273,8 @@
     try {
       const resp = await fetch(TEST_RELAY_ENDPOINT + '/verify-otp', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN },
-        body: JSON.stringify({ to: TEST_PHONE, code })
+        body: JSON.stringify({ to: TEST_PHONE, code }),
+        mode: 'cors'
       });
       const json = await resp.json();
       if (resp.ok && json.verified) {
