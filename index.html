@@ -46,16 +46,16 @@
 <script>
 (() => {
   // CONFIG - fill these values for your deployment
-  const TEST_RELAY_ENDPOINT = 'https://forget-optional-interests-females.trycloudflare.com'; // e.g. 'https://your-test.example' (must support /request-otp, /verify-otp, /receive-alert)
-  const TEST_RELAY_TOKEN = crypto.randomUUID();    // token for test relay
-  const EMS_ENDPOINT = '';        // real EMS endpoint, e.g. 'https://your-ems.example/receive-alert'
-  const EMS_AUTH_TOKEN = '';      // real EMS auth token (keep secret)
-  const TEST_PHONE = '+17133801196';         // your phone number used for OTP and test SMS (E.164)
+  const TEST_RELAY_ENDPOINT = 'https://forget-optional-interests-females.trycloudflare.com'; 
+  const TEST_RELAY_TOKEN = crypto.randomUUID();    
+  const EMS_ENDPOINT = '';        
+  const EMS_AUTH_TOKEN = '';      
+  const TEST_PHONE = '+17133801196';         
 
   // constants
   const UNIVERSAL_CODE = 'UNITED-EMS-ALERT-001';
   const TEST_SMS_MESSAGE = 'UNITED TEST ALERT — DO NOT DISPATCH EMS';
-  const EMS_ENABLED_KEY = 'united_ems_enabled_v1'; // localStorage key
+  const EMS_ENABLED_KEY = 'united_ems_enabled_v1'; 
 
   // state
   let isActive = false, mediaStream = null, recorder = null, calmInterval = null, recognition = null;
@@ -150,11 +150,9 @@
     const payload = { code: UNIVERSAL_CODE, timestamp: new Date().toISOString(), location: loc };
 
     if (getIsTestMode()) {
-      // test path -> send to test relay which will SMS you (do not forward to EMS)
       if (!TEST_RELAY_ENDPOINT) return console.warn('TEST_RELAY_ENDPOINT not set');
       const body = JSON.stringify({ type: 'metadata', data: payload, to: TEST_PHONE, test: true, message: TEST_SMS_MESSAGE });
       try {
-        // send twice so you receive two SMS confirmations
         await fetch(TEST_RELAY_ENDPOINT + '/receive-alert', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body, mode: 'cors' });
         await fetch(TEST_RELAY_ENDPOINT + '/receive-alert', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body, mode: 'cors' });
         console.log('Test metadata sent twice to relay');
@@ -162,7 +160,6 @@
       return;
     }
 
-    // production path -> send to EMS endpoint (require confirmation checkbox)
     if (!EMS_ENDPOINT) return console.warn('EMS_ENDPOINT not set');
     if (!$('confirmEms').checked) { alert('To send to live EMS you must check "Confirm SEND to EMS"'); return; }
     try {
@@ -186,7 +183,6 @@
     form.append('message', TEST_SMS_MESSAGE);
     if (loc) { form.append('latitude', loc.lat); form.append('longitude', loc.lon); }
     try {
-      // send twice
       await fetch(TEST_RELAY_ENDPOINT + '/receive-alert/recording', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body: form, mode: 'cors' });
       await fetch(TEST_RELAY_ENDPOINT + '/receive-alert/recording', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TEST_RELAY_TOKEN }, body: form, mode: 'cors' });
       console.log('Test recording sent twice');
@@ -220,7 +216,6 @@
     setStatus('EMERGENCY MODE ACTIVATED\nRecording discreetly...', false);
     startRecording();
     startCalmVoice();
-    // send metadata immediately
     await sendAlertMetadata();
   }
 
@@ -228,7 +223,7 @@
   function initSpeechRecognition() {
     if (recognition) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { /* not supported */ return; }
+    if (!SR) { return; }
     recognition = new SR();
     recognition.continuous = true; recognition.interimResults = false; recognition.lang = navigator.language || 'en-US';
     recognition.onresult = event => {
@@ -294,7 +289,6 @@
   // initialize
   window.addEventListener('load', () => {
     if (localStorage.getItem(EMS_ENABLED_KEY) === null) {
-      // default: test mode until verified
       setEmsEnabledLocally(false);
     }
     updateEmsButtons();
