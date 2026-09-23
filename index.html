@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>UNITED</title>
 <!--
-  UNITED — all-in-one build: voice trigger + GPS + RapidSOS wiring + $5/yr monetization + privacy/terms.
+  UNITED — all-in-one build: voice trigger + GPS + RapidSOS wiring + $5/yr monetization + privacy/terms + public poll (votes emailed, tally in votes.json).
   Paste this whole file over index.html in your United_AI repo.
 
   OWNER SETUP (do once):
@@ -110,6 +110,19 @@
   body>*{animation:rise .5s ease both}
   body>*:nth-child(2){animation-delay:.06s}
   body>*:nth-child(3){animation-delay:.12s}
+
+  /* POLL */
+  .poll{
+    margin:16px 0;padding:16px;border-radius:14px;text-align:center;
+    background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.4);
+    box-shadow:0 0 22px rgba(139,92,246,.12);
+  }
+  .poll-title{font-weight:900;letter-spacing:.14em;font-size:.95rem;
+    background:linear-gradient(120deg,var(--gold),#ffe9a8);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .poll-sub{color:var(--muted);font-size:.78rem;line-height:1.5;margin:8px 0 12px}
+  .poll-result{margin-top:10px;color:var(--gold);font-size:.82rem;letter-spacing:.06em;min-height:1.2em}
+  .poll button:disabled{cursor:default}
 </style>
 </head>
 <body>
@@ -149,6 +162,18 @@
       <button id="subBtn" class="gold">Subscribe — $5/year</button>
     </div>
     <div id="subState" style="margin-top:8px;color:var(--muted)"></div>
+  </div>
+
+  
+  <!-- PUBLIC POLL: votes email the dev, tally stored in votes.json -->
+  <div class="poll small">
+    <div class="poll-title">SHOULD 911 CENTERS ADOPT UNITED?</div>
+    <p class="poll-sub">Tap to vote. Every vote is emailed in and the public tally below is updated in our repo — real numbers to show RapidSOS that Americans want this.</p>
+    <div class="row">
+      <button id="voteYes" class="gold">YES</button>
+      <button id="voteNo" class="dark">NO</button>
+    </div>
+    <div id="pollResult" class="poll-result"></div>
   </div>
 
   <div class="legalinks"><a id="privacyLink">Privacy Policy</a><a id="termsLink">Terms of Service</a></div>
@@ -529,6 +554,49 @@
     modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
   }
 
+  // ---------- PUBLIC POLL ----------
+  const POLL_VOTE_KEY = 'united_voted_v1';
+  const POLL_EMAIL = 'parkinsonedward564@gmail.com'; // votes emailed here via formsubmit
+  async function loadPollTally() {
+    try {
+      const r = await fetch('votes.json', { cache: 'no-store' });
+      if (!r.ok) throw 0;
+      const j = await r.json();
+      const y = +j.yes || 0, n = +j.no || 0, t = y + n;
+      $('pollResult').textContent = t
+        ? 'YES: ' + y + '  \u2022  NO: ' + n + '  (' + t + ' vote' + (t === 1 ? '' : 's') + ' so far)'
+        : 'No votes yet \u2014 be the first.';
+    } catch (e) { $('pollResult').textContent = ''; }
+  }
+  function initPoll() {
+    loadPollTally();
+    if (localStorage.getItem(POLL_VOTE_KEY)) {
+      $('voteYes').disabled = true; $('voteNo').disabled = true;
+      $('voteYes').style.opacity = .45; $('voteNo').style.opacity = .45;
+    }
+    const cast = async (choice) => {
+      if (localStorage.getItem(POLL_VOTE_KEY)) return;
+      localStorage.setItem(POLL_VOTE_KEY, choice);
+      $('voteYes').disabled = true; $('voteNo').disabled = true;
+      try {
+        await fetch('https://formsubmit.co/ajax/' + POLL_EMAIL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            _subject: 'UNITED poll vote: ' + choice.toUpperCase(),
+            _honey: '',
+            vote: choice.toUpperCase(),
+            page: location.href,
+            time: new Date().toISOString()
+          })
+        });
+      } catch (e) {}
+      $('pollResult').textContent = 'Vote counted \u2014 thank you.';
+    };
+    $('voteYes').addEventListener('click', () => cast('yes'));
+    $('voteNo').addEventListener('click', () => cast('no'));
+  }
+
   // ---------- UI wiring ----------
   $('emBtn').addEventListener('click', activateEmergency);
   $('listenBtn').addEventListener('click', startListening);
@@ -543,6 +611,7 @@
     initOwnerUnlock();
     initSubscribe();
     initLegal();
+    initPoll();
     syncChargeUI();
     warmupGPS();
     startListening();
