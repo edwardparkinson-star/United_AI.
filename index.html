@@ -46,7 +46,7 @@
 </head>
 <body>
   <h1 id="appTitle">UNITED</h1>
-  <div id="status" class="status">Ready. Say "ALERT" or tap EMERGENCY</div>
+  <div id="status" class="status">Ready. Say "Stay Calm" or tap EMERGENCY</div>
 
   <div class="row" style="margin-bottom:8px">
     <button id="emBtn" class="red">EMERGENCY</button>
@@ -257,7 +257,7 @@
 
   function stopRecordingAndVoice() {
     isActive = false;
-    setStatus('Ready. Say "ALERT" or tap EMERGENCY');
+    setStatus('Ready. Say "Stay Calm" or tap EMERGENCY');
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
     if (calmInterval) { clearInterval(calmInterval); calmInterval = null; }
@@ -375,7 +375,7 @@
       const last = event.results[event.results.length - 1];
       const t = (last[0]?.transcript || '').trim().toLowerCase();
       if (t) setStatus(t);
-      if (t.includes('alert')) activateEmergency();
+      if (t.includes('stay calm')) activateEmergency();
       if (t.includes('help has arrived')) { stopRecordingAndVoice(); setStatus('Deactivated by EMS response team.'); }
     };
     recognition.onerror = e => {
@@ -392,8 +392,8 @@
     initSpeechRecognition();
     if (!recognition) { alert('Voice recognition not supported in this browser. Use the EMERGENCY button.'); return; }
     wantListening = true;
-    try { recognition.start(); setStatus('Listening... say "ALERT"'); }
-    catch (e) { setStatus('Listening... say "ALERT"'); }
+    try { recognition.start(); setStatus('Listening... say "Stay Calm"'); }
+    catch (e) { setStatus('Listening... say "Stay Calm"'); }
   }
 
   // ---------- OTP: enable EMS on this device ----------
@@ -434,7 +434,7 @@
   // ---------- LEGAL ----------
   const PRIVACY_HTML = `
     <p><strong>UNITED Privacy Policy</strong> (template — not legal advice)</p>
-    <p><strong>What we collect:</strong> (1) Microphone audio — only after you trigger an alert ("ALERT" or EMERGENCY). (2) GPS location — captured at alert time. (3) Your phone number — only if you verify the device for EMS mode.</p>
+    <p><strong>What we collect:</strong> (1) Microphone audio — only after you trigger an alert ("Stay Calm" or EMERGENCY). (2) GPS location — captured at alert time. (3) Your phone number — only if you verify the device for EMS mode.</p>
     <p><strong>How it's used:</strong> Audio and location are transmitted solely to dispatch your alert — to your test relay in TEST mode, or to emergency services via RapidSOS in LIVE mode. Nothing is used for advertising.</p>
     <p><strong>What we don't do:</strong> We don't sell your data. This build runs no analytics and shows no ads.</p>
     <p><strong>Storage:</strong> Alert recordings are transmitted, not stored by us. App settings stay on your device (localStorage) and can be cleared by clearing site data.</p>
@@ -474,7 +474,7 @@
     syncChargeUI();
     warmupGPS();
     startListening();
-    if (!recognition) setStatus('Ready. Say "ALERT" or tap EMERGENCY');
+    if (!recognition) setStatus('Ready. Say "Stay Calm" or tap EMERGENCY');
   });
 
 })();

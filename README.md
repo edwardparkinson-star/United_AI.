@@ -2,7 +2,7 @@
 United emergency services
 # UNITED
 
-Voice-triggered emergency alert web app. Say "ALERT" or tap EMERGENCY, confirm SEND — UNITED captures your GPS location, records audio, and dispatches the alert.
+Voice-triggered emergency alert web app. Say "Stay Calm" or tap EMERGENCY, confirm SEND — UNITED captures your GPS location, records audio, and dispatches the alert.
 
 ## Features
 - Voice trigger ("ALERT") + big EMERGENCY button
